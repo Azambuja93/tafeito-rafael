@@ -1,22 +1,23 @@
-
-import React from 'react';
-
-import List from '@mui/material/List';
-import ListItem from '@mui/material/ListItem';
-import ListItemButton from '@mui/material/ListItemButton';
-import ListItemIcon from '@mui/material/ListItemIcon';
-import ListItemText from '@mui/material/ListItemText';
-import Checkbox from '@mui/material/Checkbox';
-import IconButton from '@mui/material/IconButton';
-import Delete from '@mui/icons-material/Delete';
-import AttachFile from '@mui/icons-material/AttachFile';
-import Label from '@mui/icons-material/Label';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
-import Stack from '@mui/material/Stack';
-import {Task, Category, Tag} from '../../common/types';
-import { useAxios } from '../../hooks/useAxios';
-import TagsInput from '../TagsInput';
+import React from "react";
+import List from "@mui/material/List";
+import ListItem from "@mui/material/ListItem";
+import ListItemButton from "@mui/material/ListItemButton";
+import ListItemIcon from "@mui/material/ListItemIcon";
+import ListItemText from "@mui/material/ListItemText";
+import Checkbox from "@mui/material/Checkbox";
+import IconButton from "@mui/material/IconButton";
+import Delete from "@mui/icons-material/Delete";
+import AttachFile from "@mui/icons-material/AttachFile";
+import Label from "@mui/icons-material/Label";
+import Tooltip from "@mui/material/Tooltip";
+import Typography from "@mui/material/Typography";
+import Stack from "@mui/material/Stack";
+import { Task, Category, Tag } from "../../common/types";
+import { useAxios } from "../../hooks/useAxios";
+import TagsInput from "../TagsInput";
+import { FileDownload } from "@mui/icons-material";
+import axios from "axios";
+import { FileDownload, FileDownloadOff } from "@mui/icons-material";
 
 type TasksListProps = {
   tasks: Task[];
@@ -38,6 +39,33 @@ export default function TasksList(props:TasksListProps) {
     tasks,
     updateTasks
   } = props;
+
+  const [attachments, setAttachments] = React.useState<any>(
+    tasks.map((task) => task.id).reduce((a, v) => ({ ...a, [v]: "" }), {})
+  );
+
+  const item = window.localStorage.getItem("token");
+  const tokenObj = JSON.parse(item!);
+
+  React.useEffect(() => {
+    async function fetchAttachments() {
+      const result = await Promise.all(
+        tasks.map((task) => {
+          return axios({
+            method: "GET",
+            url: `http://localhost:8080/tarefas/${task.id}/anexos`,
+            headers: { Authorization: `Bearer ${tokenObj!.token}` },
+          })
+            .then((response) => ({ [task.id]: response.data.nome }))
+            .catch(() => ({ [task.id]: "" }));
+        })
+      );
+
+      setAttachments(Object.assign({}, ...result));
+    }
+
+    fetchAttachments();
+  }, []);
 
   const [checked, setChecked] = React.useState([0]);
 
@@ -90,7 +118,6 @@ export default function TasksList(props:TasksListProps) {
     path: `tarefas/:id/etiquetas`
   });
 
-
   const deleteTask = (taskId:number) => {
     commitTask({}, updateTasks, `tarefas/${taskId}`)
   }
@@ -127,8 +154,57 @@ export default function TasksList(props:TasksListProps) {
             key={task.id}
             secondaryAction={
               <Stack direction='row' spacing={1}>
-                <Tooltip title='Adicionar Anexo'>
-                <IconButton edge="end" aria-label="anexos">
+                {attachments[task.id as any] ? (
+                    <Tooltip title="Remover Anexo">
+                      <IconButton
+                        edge="end"
+                        aria-label="remover"
+                        onClick={async () => {
+                          await axios({
+                            method: "DELETE",
+                            url: `http://localhost:8080/tarefas/${task.id}/anexos`,
+                            headers: {
+                              Authorization: `Bearer ${tokenObj!.token}`,
+                            },
+                            responseType: "blob",
+                          });
+
+                          setAttachments((s: any) => ({
+                            ...s,
+                            [task.id]: "",
+                          }));
+                        }}
+                      >
+                        <FileDownloadOff />
+                      </IconButton>
+                    </Tooltip>
+                  ) : null}
+                      <input
+                        id={`file-input-${task.id}`}
+                        type="file"
+                        hidden
+                        onChange={async (event) => {
+                          const input = event.currentTarget;
+
+                          if (input.files) {
+                            const formData = new FormData();
+                            formData.append("arquivo", input.files[0]);
+                            const { data } = await axios({
+                              method: "POST",
+                              url: `http://localhost:8080/tarefas/${task.id}/anexos`,
+                              headers: {
+                                Authorization: `Bearer ${tokenObj!.token}`,
+                              },
+                              data: formData,
+                            });
+                            setAttachments((s: any) => ({
+                              ...s,
+                              [task.id]: data.nome,
+                            }));
+                          }
+                        }}
+                      />
+
                   <AttachFile />
                 </IconButton>
                 </Tooltip>
@@ -138,6 +214,7 @@ export default function TasksList(props:TasksListProps) {
                 </IconButton>
                 </Tooltip>
               </Stack>
+              }
             }
             disablePadding
           >
